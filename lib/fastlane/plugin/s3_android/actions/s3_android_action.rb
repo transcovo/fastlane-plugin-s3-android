@@ -47,6 +47,8 @@ module Fastlane
 
         html_template_path = params[:html_template_path]
 
+        apk_version = self.get_version_from_apk(apk)
+
         s3_client = self.s3_client(s3_access_key, s3_secret_access_key, s3_region)
         bucket = s3_client.buckets[s3_bucket]
 
@@ -74,6 +76,7 @@ module Fastlane
 
         html_render = eth.render(html_template, {
           apk_url: apk_url,
+          apk_version: apk_version,
         })
 
         html_url = self.upload_file(bucket, html_file_name, html_render, acl)
@@ -165,6 +168,23 @@ module Fastlane
 
         # Return public url
         obj.public_url.to_s
+      end
+
+      #
+      # get version name from APK
+      #
+      def self.get_version_from_apk(path_to_apk)
+        UI.user_error!("You must define your ANDROID_HOME") unless ENV['ANDROID_HOME'] != nil
+
+        # search for most recent aapt
+        aaptBinary = %x( find $ANDROID_HOME/build-tools -name "aapt" | tail -1 | tr -s \"\\n\" \" \" )
+        # extract versionName='X.Y.Z' from APK
+        getVersionCmd = aaptBinary+ "dump badging " + path_to_apk + " | tr -s \" \" \"\\n\" | grep \"versionName\"\n"
+        # execute the command line
+        getVersion = `#{getVersionCmd}`
+
+        #return only the X.Y.Z
+        return getVersion.scan(/versionName='(.*)'/).first.join
       end
 
       def self.description
