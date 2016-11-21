@@ -20,7 +20,7 @@ The `s3_android` action can upload Android apps (APK).
 Add the `s3_android` action after the `gym` step:
 
 ```ruby
-s3_action
+s3_android
 ```
 
 You can customize a lot of options:
