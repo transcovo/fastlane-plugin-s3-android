@@ -12,7 +12,7 @@ gem 'fastlane-plugin-s3_android', git: 'https://github.com/transcovo/fastlane-pl
 
 ## About s3-android
 
-Upload a new build to Amazon S3 to distribute the build to beta testers. 
+Upload a new build to Amazon S3 to distribute the build to beta testers.
 This step will generate the necessary HTML for you
 
 The `s3_android` action can upload Android apps (APK).
@@ -32,9 +32,10 @@ s3_android(
   region: ENV['S3_REGION'],                       # Required from user.
 
   apk: 'AppName.apk',                             # Required
-  
+
   path: '/path/to/apk',                           # target path on S3
   html_template_path: '/path/to/template',        # path to HTML template
+  html_file_name: '/path/to/template/on/s3'       # path to HTML on S3
 )
 ```
 

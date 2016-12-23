@@ -26,6 +26,7 @@ module Fastlane
         params[:bucket] = config[:bucket]
         params[:region] = config[:region]
         params[:html_template_path] = config[:html_template_path]
+        params[:html_file_name] = config[:html_file_name]
         params[:acl] = config[:acl]
         params[:path] = config[:path]
 
@@ -44,6 +45,7 @@ module Fastlane
         UI.user_error!("No APK file path given, pass using `apk: 'apk path'`") unless apk.to_s.length > 0
 
         html_template_path = params[:html_template_path]
+        html_file_name = params[:html_file_name]
 
         apk_version = self.get_version_from_apk(apk)
 
@@ -60,7 +62,7 @@ module Fastlane
         Actions.lane_context[SharedValues::S3_APK_OUTPUT_PATH] = apk_url
         ENV[SharedValues::S3_APK_OUTPUT_PATH.to_s] = apk_url
 
-        html_file_name = "#{s3_path}index.html"
+        html_file_name ||= "index.html"
 
         # grabs module
         eth = Fastlane::ErbTemplateHelper
@@ -249,6 +251,10 @@ module Fastlane
           FastlaneCore::ConfigItem.new(key: :html_template_path,
                                         env_name: "",
                                         description: "html erb template path",
+                                        optional: true),
+          FastlaneCore::ConfigItem.new(key: :html_file_name,
+                                        env_name: "",
+                                        description: "uploaded html filename",
                                         optional: true),
           FastlaneCore::ConfigItem.new(key: :acl,
                                        env_name: "S3_ACL",
