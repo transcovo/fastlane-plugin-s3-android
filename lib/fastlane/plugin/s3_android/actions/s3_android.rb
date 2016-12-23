@@ -4,7 +4,7 @@ module Fastlane
   module Actions
     module SharedValues
       S3_APK_OUTPUT_PATH = :S3_APK_OUTPUT_PATH
-      S3_HTML_OUTPUT_PATH = :S3_HTML_OUTPUT_PATH
+      S3_APK_HTML_OUTPUT_PATH = :S3_APK_HTML_OUTPUT_PATH
     end
 
     S3_ANDROID_ARGS_MAP = {
@@ -14,7 +14,6 @@ module Fastlane
       bucket: '-b',
       region: '-r',
       acl: '--acl',
-      source: '--source-dir',
       path: '-P'
     }
 
@@ -27,12 +26,12 @@ module Fastlane
         params[:bucket] = config[:bucket]
         params[:region] = config[:region]
         params[:html_template_path] = config[:html_template_path]
+        params[:html_file_name] = config[:html_file_name]
         params[:acl] = config[:acl]
         params[:path] = config[:path]
 
         # Pulling parameters for other uses
         s3_region = params[:region]
-        s3_subdomain = params[:region] ? "s3-#{params[:region]}" : "s3"
         s3_access_key = params[:access_key]
         s3_secret_access_key = params[:secret_access_key]
         s3_bucket = params[:bucket]
@@ -46,6 +45,7 @@ module Fastlane
         UI.user_error!("No APK file path given, pass using `apk: 'apk path'`") unless apk.to_s.length > 0
 
         html_template_path = params[:html_template_path]
+        html_file_name = params[:html_file_name]
 
         apk_version = self.get_version_from_apk(apk)
 
@@ -56,13 +56,13 @@ module Fastlane
         apk_file_name = "#{s3_path}#{apk_file_basename}"
         apk_file_data = File.open(apk, 'rb')
 
-        apk_url = self.upload_file(bucket, apk_file_name, apk_file_data, acl)
+        apk_url = self.upload_file(bucket, apk_file_name, apk_file_data, acl, "application/vnd.android.package-archive")
 
         # Setting action and environment variables
         Actions.lane_context[SharedValues::S3_APK_OUTPUT_PATH] = apk_url
         ENV[SharedValues::S3_APK_OUTPUT_PATH.to_s] = apk_url
 
-        html_file_name = "#{s3_path}index.html"
+        html_file_name ||= "index.html"
 
         # grabs module
         eth = Fastlane::ErbTemplateHelper
@@ -76,18 +76,17 @@ module Fastlane
 
         html_render = eth.render(html_template, {
           apk_url: apk_url,
-          apk_version: apk_version,
+          apk_version: apk_version
         })
 
-        html_url = self.upload_file(bucket, html_file_name, html_render, acl)
+        html_url = self.upload_file(bucket, html_file_name, html_render, acl, nil)
 
-        Actions.lane_context[SharedValues::S3_HTML_OUTPUT_PATH] = html_url
-        ENV[SharedValues::S3_HTML_OUTPUT_PATH.to_s] = html_url
+        Actions.lane_context[SharedValues::S3_APK_HTML_OUTPUT_PATH] = html_url
+        ENV[SharedValues::S3_APK_HTML_OUTPUT_PATH.to_s] = html_url
 
         UI.success("Successfully uploaded apk file to '#{Actions.lane_context[SharedValues::S3_APK_OUTPUT_PATH]}'")
 
         return true
-
       end
 
       # @return true if loading the AWS SDK from the 'aws-sdk' gem yields the expected v1 API, or false otherwise
@@ -155,8 +154,9 @@ module Fastlane
         s3_client
       end
 
-      def self.upload_file(bucket, file_name, file_data, acl)
-        obj = bucket.objects.create(file_name, file_data, acl: acl)
+      def self.upload_file(bucket, file_name, file_data, acl, content_type)
+        content_type ||= "text/html"
+        obj = bucket.objects.create(file_name, file_data, acl: acl, content_type: content_type)
 
         # When you enable versioning on a S3 bucket,
         # writing to an object will create an object version
@@ -174,17 +174,23 @@ module Fastlane
       # get version name from APK
       #
       def self.get_version_from_apk(path_to_apk)
-        UI.user_error!("You must define your ANDROID_HOME") unless ENV['ANDROID_HOME'] != nil
+        if ENV['ANDROID_HOME'].nil?
+          UI.important("You must define your ANDROID_HOME in order to detect APK version name")
+          return
+        end
 
         # search for most recent aapt
-        aaptBinary = %x( find $ANDROID_HOME/build-tools -name "aapt" | tail -1 | tr -s \"\\n\" \" \" )
-        # extract versionName='X.Y.Z' from APK
-        getVersionCmd = aaptBinary+ "dump badging " + path_to_apk + " | tr -s \" \" \"\\n\" | grep \"versionName\"\n"
-        # execute the command line
-        getVersion = `#{getVersionCmd}`
+        aapt_binary = Dir["#{ENV['ANDROID_HOME']}/build-tools/*/aapt"].last
+        UI.verbose("aapt binary used : " + aapt_binary)
 
-        #return only the X.Y.Z
-        return getVersion.scan(/versionName='(.*)'/).first.join
+        # extract versionName='X.Y.Z' from APK
+        get_version_cmd = aapt_binary + " dump badging " + path_to_apk
+
+        # execute the command line
+        get_version = `#{get_version_cmd}`
+
+        # return only the X.Y.Z
+        return get_version.scan(/versionName='(.*)\.(.*)\.(.*)' /).first.join(".")
       end
 
       def self.description
@@ -246,10 +252,10 @@ module Fastlane
                                         env_name: "",
                                         description: "html erb template path",
                                         optional: true),
-          FastlaneCore::ConfigItem.new(key: :source,
-                                       env_name: "S3_SOURCE",
-                                       description: "Optional source directory e.g. ./build ",
-                                       optional: true),
+          FastlaneCore::ConfigItem.new(key: :html_file_name,
+                                        env_name: "",
+                                        description: "uploaded html filename",
+                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :acl,
                                        env_name: "S3_ACL",
                                        description: "Uploaded object permissions e.g public_read (default), private, public_read_write, authenticated_read ",
@@ -260,6 +266,10 @@ module Fastlane
 
       def self.is_supported?(platform)
         platform == :android
+      end
+
+      def self.category
+        :beta
       end
     end
   end
