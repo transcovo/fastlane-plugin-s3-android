@@ -14,7 +14,8 @@ module Fastlane
       bucket: '-b',
       region: '-r',
       acl: '--acl',
-      path: '-P'
+      path: '-P',
+      short_commit_hash: '--hash'
     }
 
     class S3AndroidAction < Action
@@ -29,6 +30,7 @@ module Fastlane
         params[:html_file_name] = config[:html_file_name]
         params[:acl] = config[:acl]
         params[:path] = config[:path]
+        params[:short_commit_hash] = config[:short_commit_hash]
 
         # Pulling parameters for other uses
         s3_region = params[:region]
@@ -38,6 +40,7 @@ module Fastlane
         apk = params[:apk]
         s3_path = params[:path]
         acl = params[:acl].to_sym
+        short_commit_hash = params[:short_commit_hash]
 
         UI.user_error!("No S3 access key given, pass using `access_key: 'key'`") unless s3_access_key.to_s.length > 0
         UI.user_error!("No S3 secret access key given, pass using `secret_access_key: 'secret key'`") unless s3_secret_access_key.to_s.length > 0
@@ -57,12 +60,14 @@ module Fastlane
         apk_file_data = File.open(apk, 'rb')
 
         apk_url = self.upload_file(bucket, apk_file_name, apk_file_data, acl, "application/vnd.android.package-archive")
+        apk_date = File.mtime(apk).strftime("%d-%m-%Y %H:%M:%S UTC")
 
         # Setting action and environment variables
         Actions.lane_context[SharedValues::S3_APK_OUTPUT_PATH] = apk_url
         ENV[SharedValues::S3_APK_OUTPUT_PATH.to_s] = apk_url
 
         html_file_name ||= "index.html"
+        short_commit_hash ||= ""
 
         # grabs module
         eth = Fastlane::ErbTemplateHelper
@@ -76,7 +81,9 @@ module Fastlane
 
         html_render = eth.render(html_template, {
           apk_url: apk_url,
-          apk_version: apk_version
+          apk_version: apk_version,
+          short_commit_hash: short_commit_hash,
+          apk_date: apk_date
         })
 
         html_url = self.upload_file(bucket, html_file_name, html_render, acl, nil)
@@ -260,7 +267,11 @@ module Fastlane
                                        env_name: "S3_ACL",
                                        description: "Uploaded object permissions e.g public_read (default), private, public_read_write, authenticated_read ",
                                        optional: true,
-                                       default_value: "public_read")
+                                       default_value: "public_read"),
+          FastlaneCore::ConfigItem.new(key: :short_commit_hash,
+                                        env_name: "",
+                                        description: "short commit hash",
+                                        optional: true)
         ]
       end
 
