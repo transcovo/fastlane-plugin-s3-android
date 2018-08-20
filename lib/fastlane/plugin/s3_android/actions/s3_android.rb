@@ -197,7 +197,7 @@ module Fastlane
         get_version = `#{get_version_cmd}`
 
         # return only the X.Y.Z
-        return get_version.scan(/versionName='(.*)\.(.*)\.(.*)' /).first.join(".")
+        return get_version.scan(/versionName='(.*)\.(.*)\.(.*)'/).first.join(".")
       end
 
       def self.description
